@@ -12,7 +12,9 @@
     "test": "node scripts/check-boundaries.mjs && vitest run",
     "test:watch": "vitest",
     "test:game": "vitest run tests/determinism",
+    "test:orion": "vitest run tests/protocol/orion.test.ts tests/protocol/durability.test.ts tests/protocol/orion-modernization.test.ts tests/unit/orion-observation.test.ts tests/unit/orion-strategist.test.ts tests/unit/orion-modernization.test.ts",
     "test:balance": "MOO2_BALANCE=1 vitest run tests/balance",
+    "benchmark:orion": "node scripts/orion-benchmark.mjs",
     "test:e2e": "playwright test",
     "lobby:server": "bash scripts/run-lobby-server.sh"
   },

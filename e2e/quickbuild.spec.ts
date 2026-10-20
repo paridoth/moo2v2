@@ -78,7 +78,8 @@ test('map hotkey builds, status bars, autopilot bar and research queue', async (
   // It either sails past turn 4 or legitimately stops early (leader offer,
   // arrival…) with a named reason — both are correct behavior. ---
   await page.getByTestId('fast-forward').click();
-  await expect(page.getByTestId('ff-banner')).toBeVisible();
+  // A leader/arrival interrupt can stop auto-play in the same render.
+  await expect(page.getByTestId('ff-banner').or(page.getByTestId('ff-note'))).toBeVisible();
   await expect
     .poll(
       async () => {

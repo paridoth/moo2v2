@@ -5,7 +5,10 @@
 import { ENGINE_VERSION } from '@engine/index';
 import { DATA_VERSION } from '@engine/data/index';
 import { createGameEngine } from '@engine/adapter';
-import type { GameState } from '@engine/types';
+import type { GameState, SinglePlayerConfig } from '@engine/types';
+import { attachAiSeats } from '@ai/seats';
+import type { LocalAiController } from '@ai/controller';
+import { botRaceById, botRacePicks } from './botRaces';
 import type { EngineAdapter } from '@protocol/engineAdapter';
 import type { HostCore } from '@protocol/host';
 import { LobbylinkTransport } from '@protocol/lobbylinkTransport';
@@ -45,6 +48,8 @@ export interface ActiveGame {
   solo: SoloBot | null;
   /** single-player mode: ALL local bot opponents (1..N, in seat order) */
   soloBots: SoloBot[];
+  /** Fair Orion seats; no full-state strategy access or debug grants. */
+  aiSeats?: LocalAiController[];
   /** bots subbed in for absent players (host only; name-matched to seats) */
   bots: SoloBot[];
   /** play-by-mail session info (set by enterPbmGame); null in normal games */
@@ -60,7 +65,7 @@ export interface ActiveGame {
 
 /** lobby-level bot choice: the two SoloBot modes plus the OnionAI doctrine
  * (a fair-mode bot running the constraint-driven onion brain) */
-export type LobbyBotMode = BotMode | 'onion';
+export type LobbyBotMode = BotMode | 'onion' | 'strategic';
 
 export interface SoloSetup {
   name: string;
@@ -68,6 +73,8 @@ export interface SoloSetup {
   specs: SoloBotSpec[];
   /** room code the campaign persists under (default SOLO) */
   code: string;
+  difficulty?: SinglePlayerConfig['difficulty'];
+  configuration?: SinglePlayerConfig;
 }
 
 /** Host-side: let a bot take over an absent player's seat. The bot helloes
@@ -264,7 +271,7 @@ export interface SoloBotSpec {
  * keep their stable names (Bot, Bot 2, ...) so resume re-seats them. */
 export async function enterSoloGame(
   name: string,
-  botMode: LobbyBotMode = 'parity',
+  botMode: LobbyBotMode = 'strategic',
   personality: BotPersonality | 'auto' = 'militarist',
   botSpecs?: SoloBotSpec[],
   opts?: {
@@ -272,13 +279,15 @@ export async function enterSoloGame(
     code?: string;
     /** abandon any stored campaign under this code and start over */
     fresh?: boolean;
+    difficulty?: SinglePlayerConfig['difficulty'];
+    configuration?: SinglePlayerConfig;
   },
 ): Promise<ActiveGame> {
-  const specs: SoloBotSpec[] = botSpecs?.length ? botSpecs : [{ personality }];
+  let specs: SoloBotSpec[] = botSpecs?.length ? botSpecs : [{ personality }, { personality: 'expander' }];
   const playerCount = 1 + specs.length;
   const code = opts?.code?.trim() || 'SOLO';
   const params: RoomParams = { server: 'local', code, name, playerCount };
-  const hub = new MemoryHub(playerCount);
+  const hub = new MemoryHub(8); // capacity also covers restored legacy campaigns
   const hostTransport = hub.join();
 
   const { store, sqlocal, memoryOnly } = await openRoomStore(params.code);
@@ -298,6 +307,34 @@ export async function enterSoloGame(
     lobbyServer: params.server,
   };
   const resume = await loadResume(store, params.code, createGameEngine() as unknown as EngineAdapter<GameState>);
+  // Saved ownership wins over the Home screen's current bot count/options.
+  const savedConfig = resume?.state?.settings.singlePlayer;
+  if (savedConfig) botMode = 'strategic';
+  // Pre-Orion saves have no ownership metadata. Preserve their old solo
+  // policy instead of silently migrating them or enabling new commands.
+  if (resume?.state && !savedConfig && botMode === 'strategic') {
+    botMode = resume.state.settings.debugCommands ? 'parity' : 'fair';
+    specs = resume.state.empires.filter((e) => e.id !== 0).map(() => ({ personality: 'auto' }));
+  }
+  let config: SinglePlayerConfig | undefined = savedConfig ?? opts?.configuration;
+  if (botMode === 'strategic' && !config) {
+    config = {
+      version: 1, humanSeat: 0, difficulty: opts?.difficulty ?? 'normal',
+      opponents: specs.map((spec, i) => {
+        const race = spec.race ? botRaceById.get(spec.race) : undefined;
+        const picks = spec.race ? botRacePicks(spec.race, DEFAULT_SETTINGS.pickPoints ?? 10) : null;
+        return {
+          seat: i + 1, name: i === 0 ? 'Bot' : `Bot ${i + 1}`, strategy: 'strategist-v3',
+          personality: spec.personality === 'auto' || !spec.personality ? 'balanced' : spec.personality,
+          raceJson: JSON.stringify({ ...(race && picks ? { picks, raceName: race.name } : { presetId: spec.race ?? 'hivex' }),
+            ...(spec.color ? { color: spec.color } : {}) }),
+          ...(spec.shipStyle ? { shipStyle: spec.shipStyle } : {}),
+        };
+      }),
+    };
+  }
+  if (savedConfig) specs = savedConfig.opponents.map((p) => ({ personality: p.personality }));
+  params.playerCount = config ? config.opponents.length + 1 : specs.length + 1;
 
   const hosted = createHostedGame<GameState>({
     transport: hostTransport,
@@ -307,11 +344,13 @@ export async function enterSoloGame(
     store,
     // debugCommands power the parity bot's logged "grants" — the sim has no
     // bot cases; the fair bot never uses them
-    settings: { ...DEFAULT_SETTINGS, playerCount, debugCommands: botMode === 'parity' },
+    settings: { ...DEFAULT_SETTINGS, playerCount: config ? config.opponents.length + 1 : playerCount,
+      debugCommands: botMode === 'parity', ...(config ? { singlePlayer: config } : {}) },
     identity,
     ...(resume && resume.log.length ? { resume: { gameId: resume.gameId, log: resume.log } } : {}),
   });
-  const soloBots = specs.map((spec, i) => {
+  const aiSeats = config ? attachAiSeats(hosted.host, config) : [];
+  const soloBots = config ? [] : specs.map((spec, i) => {
     const botSession = joinGame<GameState>({
       transport: hub.join(),
       engine: createGameEngine() as unknown as EngineAdapter<GameState>,
@@ -320,7 +359,7 @@ export async function enterSoloGame(
     });
     return new SoloBot({
       session: botSession,
-      mode: botMode === 'onion' ? 'fair' : botMode,
+      mode: botMode === 'parity' ? 'parity' : 'fair',
       ...(botMode === 'onion' ? { brain: 'onion' as const } : {}),
       personality: spec.personality ?? personality,
       ...(spec.race ? { race: spec.race } : {}),
@@ -340,9 +379,10 @@ export async function enterSoloGame(
     startGame: () => hosted.host.startGame(generateSeed()),
     solo: soloBots[0] ?? null,
     soloBots,
+    aiSeats,
     bots: [],
     pbm: null,
-    soloSetup: { name, botMode, specs, code: params.code },
+    soloSetup: { name, botMode, specs, code: params.code, difficulty: config?.difficulty, configuration: config },
   };
 }
 
@@ -354,10 +394,16 @@ export async function restartSoloGame(active: ActiveGame): Promise<ActiveGame> {
   const setup = active.soloSetup;
   if (!setup) throw new Error('not a single-player game');
   for (const b of active.soloBots) b.close();
+  for (const b of active.aiSeats ?? []) b.close();
+  active.host?.close();
   active.transport.close();
+  await Promise.resolve(); // drain already queued local deliveries
+  await active.session.flush();
   await active.store?.destroy().catch(() => undefined);
   return enterSoloGame(setup.name, setup.botMode, setup.specs[0]?.personality ?? 'militarist', setup.specs, {
     code: setup.code,
     fresh: true,
+    difficulty: setup.difficulty,
+    configuration: setup.configuration,
   });
 }

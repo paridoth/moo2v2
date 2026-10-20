@@ -5,15 +5,36 @@
 // buildings — the documented never-below-1-pop rule means the barrage still
 // destroys nothing, and the report must say so (bombDamage > 0, popKilled 0).
 import { describe, expect, it } from 'vitest';
-import { gunzipSync } from 'node:zlib';
-import { readFileSync } from 'node:fs';
+import { createGameEngine } from '@engine/adapter';
+import { DEFAULT_SETTINGS } from '@protocol/messages';
 import { resolveBattle, fleetBombardDamage } from '@engine/battles';
 import type { GameState, PendingBattle, TurnEvent } from '@engine/types';
 
+// The upstream bug save was never committed. A small synthetic scenario
+// reproduces the same 6 beam destroyers versus an undefended 1-pop colony.
 function loadState(): GameState {
-  const buf = readFileSync('bugs/moo2v2-314-turn204.moo2save');
-  const env = JSON.parse(gunzipSync(buf.subarray(9)).toString());
-  return JSON.parse(env.snapshot.stateJson) as GameState;
+  const state = createGameEngine().init({
+    seed: '0123456789abcdef0123456789abcdef',
+    settings: { ...DEFAULT_SETTINGS, galaxySize: 'small', playerCount: 2 },
+    players: [0, 1].map((id) => ({ id, name: `Empire ${id}`, raceJson: null })),
+    dataVersion: 'test',
+  });
+  state.turn = 204;
+  const target = state.colonies.find((c) => c.owner === 1)!;
+  const planet = state.planets.find((p) => p.id === target.planetId)!;
+  // Use the historic star ids expected by the reproduction below.
+  for (const p of state.planets) if (p.starId === 8) p.starId = planet.starId;
+  planet.starId = 8;
+  target.groups = [{ race: 1, popK: 1000, farmers: 1, workers: 0, scientists: 0, unrest: false }];
+  target.buildings = [];
+  state.empires[0]!.designs = [{ id: 100, name: 'Beam destroyer', hull: 'destroyer', computer: 1, shield: 0,
+    specials: [], obsolete: false,
+    weapons: [{ weapon: 'laser_cannon', count: 3, mods: [] }, { weapon: 'fusion_beam', count: 1, mods: [] }],
+  }];
+  state.ships = Array.from({ length: 6 }, (_, i) => ({ id: 9000 + i, owner: 0, shipKind: 'design', designId: 100,
+    location: { kind: 'star', starId: 12 }, cargoPopUnits: 0, cargoRace: 0, dmgStructure: 0, dmgArmor: 0,
+  }));
+  return state;
 }
 
 describe('bombardment by a beam-only fleet', () => {

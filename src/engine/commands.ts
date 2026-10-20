@@ -1561,6 +1561,16 @@ function normalizeJobsForGroup(g: PopGroup): void {
 // ---------- registry ----------
 
 export const COMMANDS: Record<string, { validate: Validator; apply: Applier }> = {
+  // Durable completion marker: prevents a reloaded AI redoing an already
+  // finished plan. No economy/turn advancement privileges; ordinary validation.
+  ai_turn_complete: {
+    validate: (state, cmd) => {
+      if (!state.settings.singlePlayer?.opponents.some((p) => p.seat === cmd.playerId)) return 'not an AI seat';
+      if (state.empires.find((e) => e.id === cmd.playerId)?.aiTurnCompleted === state.turn) return 'AI already finished this turn';
+      return null;
+    },
+    apply: (state, cmd) => { state.empires.find((e) => e.id === cmd.playerId)!.aiTurnCompleted = state.turn; },
+  },
   set_jobs: { validate: validateSetJobs, apply: applySetJobs },
   set_build_queue: { validate: validateSetQueue, apply: applySetQueue },
   buy_production: { validate: validateBuy, apply: applyBuy },

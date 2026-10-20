@@ -32,6 +32,22 @@
     void app.version;
     return session().getPlanned();
   });
+  // A resolved turn is ready only once its accepted history is recorded.
+  // Otherwise background-tab throttling can leave SQLite writes outstanding
+  // when a player sees the new turn and immediately reloads.
+  const stateTurn = $derived(gs?.turn ?? 0);
+  let recordedTurn = $state(0);
+  const turnReady = $derived(!getActive()?.soloSetup || recordedTurn === stateTurn);
+  $effect(() => {
+    const turn = stateTurn;
+    const active = getActive();
+    if (!active?.soloSetup || !turn) return;
+    let cancelled = false;
+    void active.session.flush().then(() => {
+      if (!cancelled && getActive() === active) recordedTurn = turn;
+    });
+    return () => { cancelled = true; };
+  });
   // one consistent color per player on every surface: fold chosen banner
   // colors into the shared registry whenever the state changes
   $effect(() => {
@@ -216,7 +232,7 @@
    * has committed" is true every single turn — pure noise, never shown */
   const soloGame = $derived.by(() => {
     void app.version;
-    return (getActive()?.soloBots.length ?? 0) > 0;
+    return !!getActive()?.soloSetup;
   });
   /** commit urgency: red = everyone else committed and they are waiting on you;
    * green = others have started committing. Latched one-way per turn so an
@@ -590,7 +606,7 @@
         data-testid="commit"
         class="commit fast"
         class:warn={researchIdle}
-        disabled={fastBlind || fastAhead >= FAST_MAX_AHEAD}
+        disabled={!turnReady || fastBlind || fastAhead >= FAST_MAX_AHEAD}
         title={fastBlind
           ? 'Recovering your fast-forwarded turns after the reload — planning resumes when the log catches up.'
           : fastAhead >= FAST_MAX_AHEAD
@@ -604,6 +620,7 @@
       <button
         data-testid="commit"
         class="commit"
+        disabled={!turnReady}
         class:committed={iCommitted}
         class:warn={researchIdle && !iCommitted}
         title={researchIdle && !iCommitted ? 'Warning: no research selected — RP will be banked unspent' : ''}
@@ -629,7 +646,8 @@
       title={fastActive && fastAhead > 0
         ? `fast start: your preview runs ${fastAhead} turn${fastAhead > 1 ? 's' : ''} ahead of the synced (slowest-player) turn ${syncedTurn}`
         : 'current turn'}
-    ><span class="lbl">Turn</span> {gs.turn}{#if fastActive && fastAhead > 0}<span class="dim syncmark">⚡</span>{/if}</span>
+      aria-busy={!turnReady}
+    >{#if turnReady}<span class="lbl">Turn</span> {gs.turn}{#if fastActive && fastAhead > 0}<span class="dim syncmark">⚡</span>{/if}{:else}Saving turn…{/if}</span>
     <span class="stat" data-testid="bc" title="treasury (change per turn)">💰 {summary.bc} <span class="delta" class:neg={summary.bcDelta < 0}>({summary.bcDelta >= 0 ? '+' : ''}{summary.bcDelta})</span></span>
     <span class="stat" data-testid="food" title="empire food surplus" class:neg={summary.foodNet < 0}>🌾 {summary.foodNet >= 0 ? '+' : ''}{summary.foodNet}</span>
     <span
@@ -726,6 +744,12 @@
   {#if !app.hostConnected}
     <div class="banner warn" data-testid="host-offline">
       ⚠ Host offline — the game is paused. It resumes when the host returns (or load their save file to re-host).
+    </div>
+  {/if}
+  {#if soloGame && gs.turn > 1 && gs.phase === 'planning'}
+    <div class="banner dim" data-testid="turn-summary" role="status">
+      Turn {gs.turn} ready. {app.reports.filter((r) => r.turn === gs.turn - 1).length} reports from turn {gs.turn - 1}.
+      <button onclick={() => { tab = 'reports'; seenReports = app.reports.length; }}>View turn reports</button>
     </div>
   {/if}
   {#if pbmInfo}

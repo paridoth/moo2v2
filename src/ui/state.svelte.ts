@@ -341,6 +341,8 @@ export function leaveGame(): void {
   app.screen = 'home';
   resetGameUiState();
   if (!g) return;
+  g.host?.close();
+  for (const b of g.aiSeats ?? []) b.close();
   g.solo?.close();
   for (const b of g.soloBots) b.close(); // close() is idempotent (solo = soloBots[0])
   for (const b of g.bots) b.close();
@@ -349,6 +351,8 @@ export function leaveGame(): void {
     // (its data source) is torn down
     await g.pbm?.stop().catch(() => undefined);
     g.transport.close();
+    await Promise.resolve();
+    await g.session.flush();
     // release the room database (OPFS access handle) so another tab can take it
     await g.store?.destroy().catch(() => undefined);
   })();

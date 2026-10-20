@@ -19,6 +19,7 @@
     "baseUrl": ".",
     "paths": {
       "@engine/*": ["src/engine/*"],
+      "@ai/*": ["src/ai/*"],
       "@protocol/*": ["src/protocol/*"],
       "@storage/*": ["src/storage/*"],
       "@ui/*": ["src/ui/*"],

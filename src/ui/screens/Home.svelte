@@ -33,7 +33,8 @@
     }
   }
 
-  let botMode = $state<'parity' | 'fair' | 'onion'>('parity');
+  let botMode = $state<'strategic' | 'parity' | 'fair' | 'onion'>('strategic');
+  let difficulty = $state<'easy' | 'normal'>('normal');
 
   // per-bot scenario config: play style, race (archetype or stock preset),
   // fleet silhouette and banner color — 'auto' keeps the seat defaults
@@ -45,7 +46,7 @@
   }
   const COLOR_NAMES = ['blue', 'red', 'green', 'yellow', 'purple', 'cyan', 'orange', 'pink'];
   const defaultBot = (): BotRow => ({ personality: 'militarist', race: 'forgers', shipStyle: 'auto', color: 'auto' });
-  let botRows = $state<BotRow[]>([defaultBot()]);
+  let botRows = $state<BotRow[]>([defaultBot(), { ...defaultBot(), personality: 'expander', race: 'hivex' }]);
 
   async function goSolo() {
     if (!name) {
@@ -63,7 +64,7 @@
       }));
       // the room code differentiates bot campaigns (blank = the classic SOLO
       // room), so several single-player games can run in different tabs
-      const active = await enterSoloGame(name, botMode, specs[0]?.personality ?? 'militarist', specs, { code });
+      const active = await enterSoloGame(name, botMode, specs[0]?.personality ?? 'militarist', specs, { code, difficulty });
       bindActive(active);
     } catch (e) {
       app.error = e instanceof Error ? e.message : String(e);
@@ -138,10 +139,16 @@
     loadNote = 'importing save…';
     try {
       const at = resumeTurn === 'latest' ? undefined : resumeTurn;
-      const res = await importSaveIntoRoom(preview, code, server, at);
+      const singlePlayer = preview.envelope.snapshot
+        ? (JSON.parse(preview.envelope.snapshot.stateJson) as { settings?: { singlePlayer?: unknown } }).settings?.singlePlayer
+        : undefined;
+      const res = await importSaveIntoRoom(preview, code, singlePlayer ? 'local' : server, at);
       loadNote = `loaded turn ${res.turn} (players: ${res.players.join(', ')}) — connecting as host…`;
       preview = null;
-      await go();
+      if (singlePlayer) {
+        const active = await enterSoloGame(name, 'strategic', 'auto', undefined, { code });
+        bindActive(active);
+      } else await go();
     } catch (e) {
       loadNote = '';
       app.error = describeSaveError(e);
@@ -178,12 +185,21 @@
       title="offline game against local bots — no server needed. The room code names the campaign (blank = SOLO): use different codes to keep several bot games going in different tabs, and re-enter a code to resume that campaign">
       🤖 Single player vs {botRows.length > 1 ? `${botRows.length} bots` : 'bot'}{code.trim() ? ` · ${code.trim()}` : ''}
     </button>
-    <select data-testid="bot-mode" bind:value={botMode} title="parity: bots keep up via visible logged grants · fair: bots play with no help at all · onion: the constraint-driven Masters-of-Onions doctrine, no help either">
-      <option value="parity">parity bots (keep up)</option>
-      <option value="fair">fair bots (no cheats)</option>
-      <option value="onion">🧅 OnionAI (constraint bot)</option>
+    <select data-testid="bot-mode" bind:value={botMode} title="Orion strategic AI uses filtered empire knowledge and normal rules. Legacy modes are upstream comparison sandboxes with full-state policies.">
+      <option value="strategic">Orion strategic AI (fair)</option>
+      <option value="parity">legacy parity sandbox (debug grants)</option>
+      <option value="fair">legacy fair sandbox (full-state policy)</option>
+      <option value="onion">legacy OnionAI sandbox (full-state policy)</option>
     </select>
   </span>
+  {#if botMode === 'strategic'}
+    <label>AI difficulty
+      <select data-testid="ai-difficulty" bind:value={difficulty}>
+        <option value="easy">Easy (economy and expansion)</option>
+        <option value="normal">Normal (economy, expansion and military)</option>
+      </select>
+    </label>
+  {/if}
   {#each botRows as bot, i (i)}
     <span class="botrow" data-testid="bot-row-{i}">
       <span class="botlabel">Bot {i + 1}</span>

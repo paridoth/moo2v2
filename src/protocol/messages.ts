@@ -23,6 +23,7 @@ export interface PlayerRoster {
 }
 
 export interface GameSettings {
+  singlePlayer?: import('@engine/types').SinglePlayerConfig;
   galaxySize: 'small' | 'medium' | 'large' | 'huge';
   /** pre_warp: only the construction basics known (colony base / star base /
    * marine barracks) — everything else (computers, lasers, drives...) is

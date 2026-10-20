@@ -366,3 +366,11 @@ room code (server field: local `http://127.0.0.1:8787` or default public server)
 - Playwright + WebRTC in sandbox → proven earliest (Phase 2 smoke); system Chrome `channel:'chrome'` + `--no-sandbox`.
 - Host trust: commit–reveal for sealed bids; malicious-host reordering accepted for friendly play (documented); full logs on every peer enable evidence + re-hosting.
 - lobbylink upstream: no changes required (vendored client covers membership/reliability/reconnect). If a genuine need appears, patch upstream generically — never game-specific.
+
+## Orion Ascendant continuation
+
+The upstream architecture and completed phases above remain historical context.
+The new single-player/strategic-AI work is tracked in
+[docs/ORION_ROADMAP.md](docs/ORION_ROADMAP.md), with architecture decisions,
+fidelity classifications and executed verification linked there. Orion reuses the
+existing solo mode and protocol; it does not restart the upstream engine plan.

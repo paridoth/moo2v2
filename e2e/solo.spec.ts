@@ -70,6 +70,9 @@ test('room-coded campaigns, no red edge, restart, and two concurrent tabs', asyn
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   page.on('dialog', (d) => void d.accept());
+  const errors: string[] = [];
+  page.on('pageerror', (error) => errors.push(error.message));
+  page.on('console', (msg) => { if (msg.type() === 'error' && msg.text().includes('[session] persistence error:')) errors.push(msg.text()); });
 
   await page.goto(`${APP}/`);
   await page.getByTestId('name').fill('Resty');
@@ -108,6 +111,8 @@ test('room-coded campaigns, no red edge, restart, and two concurrent tabs', asyn
   await expect(page2.getByTestId('memory-only')).toHaveCount(0);
   await page2.close();
 
+  expect(errors).toEqual([]); // restart must flush before destroying its store
+
   // --- reload + re-enter BOTA: the RESTARTED campaign resumes (turn 2),
   // not the abandoned one ---
   await page.reload();
@@ -115,6 +120,7 @@ test('room-coded campaigns, no red edge, restart, and two concurrent tabs', asyn
   await page.getByTestId('room').fill('BOTA');
   await page.getByTestId('solo').click();
   await expect(page.getByTestId('turn')).toHaveText('Turn 2', { timeout: 30_000 });
+  expect(errors).toEqual([]);
 
   await ctx.close();
 });

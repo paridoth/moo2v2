@@ -189,6 +189,10 @@ describe('resync + persistence', () => {
     const { hub, hosted, client, store0, store1 } = await twoPlayerGame(true);
     hosted.host.startGame(SEED);
     await hub.settle();
+    // Real SQLite completion is outside MemoryHub's microtask queue. The
+    // host now correctly holds remote game_start until it is durable.
+    await hosted.session.flush();
+    await hub.settle();
     client.submit('increment', { n: 4 });
     hosted.session.submit('increment', { n: 9 });
     await hub.settle();
@@ -223,6 +227,10 @@ describe('resync + persistence', () => {
   it('host resumes from its persisted log after a restart', async () => {
     const { hub, hosted, client, store0, store1 } = await twoPlayerGame(true);
     hosted.host.startGame(SEED);
+    await hub.settle();
+    // Real SQLite completion is outside MemoryHub's microtask queue. The
+    // host now correctly holds remote game_start until it is durable.
+    await hosted.session.flush();
     await hub.settle();
     hosted.session.submit('increment', { n: 2 });
     client.submit('increment', { n: 3 });

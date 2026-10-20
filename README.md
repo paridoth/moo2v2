@@ -140,3 +140,35 @@ for friends on the honor system, not a security barrier. The dev/e2e server
 - **Sticky build** — switching builds parks invested production on the old item.
 - **Antaran attacks** — scaling raids; build the dimensional portal to win at their home.
 - **Random events** — option-gated windfalls/disasters; lucky races dodge the bad ones.
+
+## Orion Ascendant single player
+
+Select **Orion strategic AI (fair)** (the default), enter your name, and click
+**Single player vs 2 bots**. No signaling server, second tab, API key or LLM is
+needed. Choose Easy/Normal and opponent presets on Home; choose your race/custom
+picks, galaxy and existing rules in the lobby, then Start game. Issue orders and
+End Turn; both computers act and the usual engine resolves the turn. Battle
+participants controlled by AI answer automatically. Use Reports for turn details.
+
+Save downloads a verified `.moo2save`. To resume browser storage, reenter the same
+campaign room code and click Single player. Stored AI ownership/settings override
+Home choices. To restore a downloaded Orion save, enter a name and room code,
+choose Load and confirm; it hosts offline with its computer seats. For a fresh
+campaign use a different room code or the in-game Restart control.
+
+See [Orion roadmap](docs/ORION_ROADMAP.md),
+[architecture](docs/ORION_ARCHITECTURE.md) and
+[verification](docs/ORION_VERIFICATION.md). New campaigns use the strategic
+policy (`strategist-v3`) with research paths, production forecasts, shipyard
+roles, escort/assault designs, paid refits, fleet rallying and escorted marine
+invasions. Saved v1/v2 campaigns retain their original policies.
+Competitive balance, richer emperor memory and conversational diplomacy remain
+future work.
+
+Run `npm run benchmark:orion` for six active v3-versus-v2 matches (150 turns,
+swapped seats across three races/start modes). Results and a report go to
+`benchmark-results/orion.json` and `.json.md`. Use `-- --turns 300 --output
+benchmark-results/long.json` to change the cap/output. Turn-cap games are reported
+as unfinished. The benchmark validates accepted-log replay and measures refits,
+idle production, research and food shortages; it does not establish win-rate
+superiority.

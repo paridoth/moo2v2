@@ -48,6 +48,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@engine': r('./src/engine'),
+      '@ai': r('./src/ai'),
       '@protocol': r('./src/protocol'),
       '@storage': r('./src/storage'),
       '@ui': r('./src/ui'),

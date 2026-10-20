@@ -176,6 +176,7 @@ export class HostCore<S> {
   // ----- message routing -----
 
   private route(from: number, msg: ClientToHost): void {
+    if (this.closed) return;
     if (msg.t === 'hello') return this.onHello(from, msg);
     const seat = this.seatMap.get(from);
     if (seat === undefined) return; // must hello (and get a seat) first
@@ -331,8 +332,14 @@ export class HostCore<S> {
       }
       seatId = assigned;
     } else {
-      seatId = from; // lobby: seats follow join order
-      this.seatMap.set(from, from);
+      // Local AI channels are transport identities, not empire ids. Allocate
+      // normal contiguous seats; remote peers retain their existing ids.
+      seatId = from;
+      if (from >= 1000) {
+        seatId = this.seatMap.get(from) ?? 1;
+        while (this.seats.has(seatId) && this.seatMap.get(from) !== seatId) seatId++;
+      }
+      this.seatMap.set(from, seatId);
     }
     const seat: Seat = this.seats.get(seatId) ?? {
       name: msg.name,
@@ -581,6 +588,9 @@ export class HostCore<S> {
         }
         if (this.persistBarrier && (cmd.kind === 'advance_turn' || cmd.kind === 'resolve_combat' || cmd.kind === 'game_start')) {
           try {
+            // LocalHostLink delivers asynchronously. Let the host session
+            // ingest and enqueue this command before capturing its flush chain.
+            await Promise.resolve();
             await this.persistBarrier();
           } catch {
             // persistence failures are surfaced by the session's own chain;

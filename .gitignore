@@ -3,6 +3,7 @@ dist/
 .vite/
 test-results/
 playwright-report/
+benchmark-results/
 *.local
 *.log
 .DS_Store

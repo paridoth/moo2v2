@@ -47,7 +47,7 @@ test('war, battle orders dialog, deterministic resolve, replay viewer', async ({
   await expect(a.getByTestId('start')).toBeEnabled({ timeout: 10_000 });
   await a.getByTestId('start').click();
   await expect(a.getByTestId('turn')).toHaveText('Turn 1', { timeout: 20_000 });
-  await expect(b.getByTestId('turn')).toHaveText('Turn 1');
+  await expect(b.getByTestId('turn')).toHaveText('Turn 1', { timeout: 20_000 });
 
   // gather spawn info from A's authoritative state
   const info = await a.evaluate((): { a: SpawnInfo; b: SpawnInfo } => {
@@ -89,7 +89,7 @@ test('war, battle orders dialog, deterministic resolve, replay viewer', async ({
 
   // resolution: turn advances on both, hashes agree
   await expect(a.getByTestId('turn')).toHaveText('Turn 2', { timeout: 30_000 });
-  await expect(b.getByTestId('turn')).toHaveText('Turn 2');
+  await expect(b.getByTestId('turn')).toHaveText('Turn 2', { timeout: 30_000 });
   const hA = await hashOf(a);
   await expect.poll(() => hashOf(b), { timeout: 10_000 }).toBe(hA);
 

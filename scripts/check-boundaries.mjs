@@ -29,11 +29,15 @@ const LAYER_RULES = {
     bare: ['kysely', 'sqlocal', 'better-sqlite3', 'node:'],
   },
   ui: {
-    aliases: ['@engine', '@protocol', '@storage', '@ui', '@vendor'],
+    aliases: ['@engine', '@protocol', '@storage', '@ui', '@vendor', '@ai'],
     bare: ['svelte', 'pixi.js', 'kysely', 'sqlocal'],
   },
+  ai: {
+    aliases: ['@engine', '@protocol', '@ai'],
+    bare: [],
+  },
   headless: {
-    aliases: ['@engine', '@protocol', '@storage'],
+    aliases: ['@engine', '@protocol', '@storage', '@ai'],
     bare: ['node:', 'better-sqlite3', 'kysely'],
   },
 };
@@ -97,7 +101,7 @@ function checkImports(file, text, layer, isTest) {
       }
     } else if (spec.startsWith('@')) {
       const alias = spec.split('/')[0];
-      if (['@engine', '@protocol', '@storage', '@ui', '@vendor'].includes(alias)) {
+      if (['@engine', '@protocol', '@storage', '@ui', '@vendor', '@ai'].includes(alias)) {
         if (!rules.aliases.includes(alias)) {
           errors.push(`${rel(file)}:${line} layer '${layer}' may not import ${alias} (${spec})`);
         }
@@ -112,15 +116,18 @@ function checkImports(file, text, layer, isTest) {
   }
 }
 
-function checkEngineDeterminism(file, text) {
+function checkEngineDeterminism(file, text, layer) {
   const lines = text.split('\n');
   lines.forEach((lineText, i) => {
     if (lineText.includes('boundaries-allow')) return;
     const trimmed = lineText.trim();
     if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) return;
     for (const re of ENGINE_BANNED) {
+      // The controller's event-driven executor schedules work; pure policies
+      // and the observation boundary get the same determinism bans as engine.
+      if (layer === 'ai' && file.endsWith('/controller.ts') && re.source === '\\bqueueMicrotask\\b') continue;
       if (re.test(lineText)) {
-        errors.push(`${rel(file)}:${i + 1} banned in engine (${re.source}): ${lineText.trim()}`);
+        errors.push(`${rel(file)}:${i + 1} banned in ${layer} (${re.source}): ${lineText.trim()}`);
       }
     }
   });
@@ -136,7 +143,7 @@ for (const file of walk(srcRoot)) {
   const text = readFileSync(file, 'utf8');
   const isTest = /\.test\.ts$/.test(file);
   checkImports(file, text, layer, isTest);
-  if (layer === 'engine' && !isTest) checkEngineDeterminism(file, text);
+  if ((layer === 'engine' || layer === 'ai') && !isTest) checkEngineDeterminism(file, text, layer);
 }
 
 if (errors.length) {

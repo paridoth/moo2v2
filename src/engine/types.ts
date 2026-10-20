@@ -199,6 +199,8 @@ export interface Empire {
    * older saves = starts at 1). Keeps a player's entity ids independent of
    * other empires' allocations — required by fast-start command replay. */
   nextEntityId?: number;
+  /** Completed AI planning turn; absent = no completed plan (old saves). */
+  aiTurnCompleted?: number;
   eliminated: boolean;
 }
 
@@ -248,7 +250,24 @@ export interface PendingBattle {
   ordersD: unknown | null;
 }
 
+/** Host orchestration metadata, carried by game_start and snapshots. No sim bonuses. */
+export interface SinglePlayerConfig {
+  version: 1;
+  humanSeat: number;
+  difficulty: 'easy' | 'normal';
+  opponents: Array<{
+    seat: number;
+    name: string;
+    strategy: 'expander-v1' | 'strategist-v2' | 'strategist-v3';
+    personality: 'balanced' | 'techer' | 'rusher' | 'industrialist' | 'expander' | 'militarist';
+    raceJson: string;
+    shipStyle?: string;
+  }>;
+}
+
 export interface GameStateSettings {
+  /** Absent = legacy/multiplayer seat management. */
+  singlePlayer?: SinglePlayerConfig;
   galaxySize: 'small' | 'medium' | 'large' | 'huge';
   /** pre_warp: classic MOO2 primitive age — only the construction basics are
    * known (colony base / star base / marine barracks buildable from turn 1);
